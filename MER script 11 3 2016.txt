@@ -1,0 +1,245 @@
+# All fastq files and associated metadata have been uploaded to the EMP/QIITA database, study # 10773: 
+ftp://ftp.igsb.anl.gov/jobs/27149c190056e6c9c93cea9526e224db #Run 1 = (terrestrial leaves and soil EMP and PNA)
+ftp://ftp.igsb.anl.gov/jobs/5385baa14a4f387416ed0a4c278cf3de #Run 2 = (aquatic leaves, freshwater, seawater PNA)
+ftp://ftp.igsb.anl.gov/jobs/77c37109582a4390b0e6afbcd6811170 #Run 3 = (sewater EMP)
+ftp://ftp.igsb.anl.gov/jobs/df9af2baa90219a9dcdab119a8137ef1 #Run 4 (freshwater, aquatic leaves EMP)
+
+#Prep sequencing files:
+
+gunzip December_2015/Undetermined_S0_L001_I1_001.fastq.gz   #This is an example just for sequencing Run 1, repeat for all sequencing files
+gunzip December_2015/Undetermined_S0_L001_R1_001.fastq.gz
+gunzip December_2015/Undetermined_S0_L001_R2_001.fastq.gz
+
+# Join fastq files:
+fastq-join Undetermined_S0_L001_R1_001.fastq Undetermined_S0_L001_R2_001.fastq -o out.%.fastq 
+
+# Connect barcodes:
+
+perl fastq-barcode.pl Undetermined_S0_L001_I1_001.fastq out.join.fastq > out.barcodes.fastq
+
+# Check mapping file:
+
+validate_mapping_file.py –m Jackrel_July_Misc_Mapping_File_merged.txt –o mapping_output 
+
+# Repeat these steps for all four sequencing runs before continuing
+
+#Create a param4.txt file in your home directory containing
+pick_otus:enable_rev_strand_match True
+assign_taxonomy:id_to_taxonomy_fp /mnt/vdc/data/ubuntu/97_otu_taxonomy.txt
+assign_taxonomy:reference_seqs_fp /mnt/vdc/data/ubuntu/97_otus.fasta
+align_seqs:min_length 75
+
+# Combine sequencing runs and pick otus
+
+split_libraries_fastq.py –i out.join.fastq,out.prelim.join.fastq,out.Cathy.EMPjoin.fastq,December_2015/out.join.fastq -m Jackrel_2016_Mapping_merged.txt –o split_libraries_2016_all_jan_18_2016 –b out.barcodes.fastq,out.prelim.barcodes.fastq,out.Cathy.EMP.barcodes.fastq,December_2015/out.barcodes.fastq --rev_comp_mapping_barcodes
+
+# OTU clustering
+pick_open_reference_otus.py -i split_libraries_2016_all_jan_18_2016/seqs.fna -o otu2016try14copied -p param4.txt
+
+# Remove chloroplast and mitochondrial sequences from the original BIOM table
+
+biom summarize-table -i otu2016try14/otu_table_mc2_w_tax_no_pynast_failures.biom -o otu2016try14/otu_table_summary.txt
+filter_taxa_from_otu_table.py -i otu2016try14/otu_table_mc2_w_tax_no_pynast_failures.biom  -o otu2016try14/otu_table_2016_no_Chloroplast.biom -n c__Chloroplast 
+biom summarize-table -i otu2016try14/otu_table_2016_no_Chloroplast.biom -o otu2016try14/otu_table_summary_no_Chloroplast.txt
+filter_taxa_from_otu_table.py -i otu2016try14/otu_table_2016_no_Chloroplast.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom -n f__mitochondria 
+biom summarize-table -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.txt
+
+####################################################################################################################################################################
+# Here I am generating core diversity analysis for each pairwise comaprison. This analysis uses BIOM tables that have been filtered to remove chloroplast and mitochondrial sequences. I suppress alpha and beta diversity to speed the process. This is just the an example script for the first sample, I change sample number and rarefaction depth for each pairwise comparison.    
+# These scripts generate the stacked bar plots in Figure 1 and the figures in Supplement D
+
+filter_samples_from_otu_table.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_15.55.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.55.biom; core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.55.biom -o otu2016try14copied/core_output_15.55_no_Chloro_no_Mito -m otu2016try14other/Pairwise_Mapping_File_15.55.txt –t otu2016try14copied/rep_set.tre -e 30054 --suppress_beta_diversity --suppress_alpha_diversity
+
+# Here I again generate core diversity analysis for each pairwise comaprison, but I am now using BIOM tables that have been filtered to remove chloroplast, mitochondria, and OTUs in Table 1 containing the 14-mer. I suppress alpha and beta diversity to speed the process. Again, this is just the first pairwise comparison, I repeat this script for each sample in the dataset and change the rarefaction depth accordingly.    
+# These scripts generate the stacked bar plots in Figure 1 and the figures in Supplement D
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_15.55.txt -o out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.15.55.biom; core_diversity_analyses.py –i out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.15.55.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_No_1417bpMatch_15.55 -m otu2016try14other/Pairwise_Mapping_File_15.55.txt –t otu2016try14copied/rep_set.tre -e 29924 --suppress_beta_diversity --suppress_alpha_diversity
+
+#######################################################################################################################################################################
+# These scripts simply generate a distance matrix for each sample that was not generated earlier because of the --suppress_beta_diversity command. This is just the first script as an example, I change the sample number and rarefaction depth for each. 
+
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.55.biom -o otu2016try14copied/core_outputBETA_15.55_no_Chloro_no_Mito -m otu2016try14other/Pairwise_Mapping_File_15.55.txt –t otu2016try14copied/rep_set.tre -e 30054 --suppress_taxa_summary --suppress_alpha_diversity
+
+core_diversity_analyses.py –i out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_15.55.biom -o otu2016try14copied/core_outputBETA_15.55_no_Chloro_no_Mito_no1417Match -m otu2016try14other/Pairwise_Mapping_File_15.55.txt –t otu2016try14copied/rep_set.tre -e 29924 --suppress_taxa_summary --suppress_alpha_diversity
+
+#######################################################################################################################################################################
+# Here I am completing core diversity analyses for each sample type (i.e., freshwater vs. seawater) before and then after removing OTUs containing the 14-mer 
+
+# Here are freshwater samples before 14-mer removal (Supplement D, Figure 1)
+
+filter_samples_from_otu_table.py -i -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_Freshwater.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Freshwater.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Freshwater.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_no1417Match_Freshwater_summary.txt 
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Freshwater.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mitochondria_Freshwater -m otu2016try14other/Pairwise_Mapping_File_Freshwater.txt –t otu2016try14copied/rep_set.tre –e 17169
+
+# Here are freshwater samples after 14-mer removal 
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_Freshwater.txt -o otu2016try14copied/otu_table_2016_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Freshwater.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Freshwater.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_no1417Match_Freshwater_summary.txt 
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Freshwater.biom -o otu2016try14copied/core_output_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Freshwater -m otu2016try14other/Pairwise_Mapping_File_Freshwater.txt –t otu2016try14copied/rep_set.tre -e 17164
+
+# Here are soil samples before 14-mer removal (Supplement D, Figure 2)
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_Soil.txt -o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Soil.biom
+biom summarize-table –i otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Soil.biom -o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_summary.txt
+core_diversity_analyses.py –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Soil.biom -o otu2016try14copied/core_output_no_Chloro_no_Mito_Soil -m otu2016try14other/Pairwise_Mapping_File_Soil.txt –t otu2016try14copied/rep_set.tre –e 195360
+
+# Here are soil samples after 14-mer removal
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_Soil.txt -o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Soil.biom
+biom summarize-table –i otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Soil.biom -o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_summary.txt
+core_diversity_analyses.py –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Soil.biom -o otu2016try14copied/core_output_no_Chloro_no_Mito_no_1417Match_Soil -m otu2016try14other/Pairwise_Mapping_File_Soil.txt –t otu2016try14copied/rep_set.tre -e 194935
+
+# Here are aquatic leaf samples before 14-mer removal (Supplement D, Figure 3)
+
+filter_samples_from_otu_table.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_AquaticLeaf.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Aquatic_Leaves_summary.txt
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_Aquatic_Leaves -m otu2016try14other/Pairwise_Mapping_File_AquaticLeaf.txt –t otu2016try14copied/rep_set.tre –e 7907
+
+# Here are aquatic leaf samples after 14-mer removal
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_AquaticLeaf.txt -o otu2016try14copied/otu_table_2016_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_ no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom –o otu2016try14copied/ otu_table_2016_ no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Aquatic_Leaves _summary.txt
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_ no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_no1417Match_Aquatic_Leaves -m otu2016try14other/Pairwise_Mapping_File_AquaticLeaf.txt –t otu2016try14copied/rep_set.tre -e 7898
+
+# Here are terrestrial leaf samples before 14-mer removal (Supplement D, Figure 4)
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_TerrestrialLeaf.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_TerrestrialLeaves.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_TerrestrialLeaves.biom –o otu2016try14copied/ otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_TerrestrialLeaves_summary.txt 
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_TerrestrialLeaves.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_TerrestrialLeaves -m otu2016try14other/Pairwise_Mapping_File_TerrestrialLeaf.txt –t otu2016try14copied/rep_set.tre -e 17454
+
+# Here are terrestrial leaf samples after 14-mer removal
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_TerrestrialLeaf.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_no_14of17Match_TerrestrialLeaves.biom 
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_no_14of17Match_TerrestrialLeaves.biom –o otu2016try14copied/ otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_no_14of17Match_TerrestrialLeaves_summary.txt 
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_no_14of17Match_TerrestrialLeaves.biom -o otu2016try14copied/core_output_ no_Chloroplast_no_Mito_no_14of17Match_TerrestrialLeaves -m otu2016try14other/Pairwise_Mapping_File_TerrestrialLeaf.txt –t otu2016try14copied/rep_set.tre -e 17381
+
+# Here are seawater samples before 14-mer removal (Supplement D, Figures 5 and 6)
+
+filter_samples_from_otu_table.py -i -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_Seawater.txt -o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater.biom
+biom summarize-table –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater.biom –o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater_summary.txt
+core_diversity_analyses.py –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mitochondria_Seawater -m otu2016try14other/Pairwise_Mapping_File_Seawater.txt –t otu2016try14copied/rep_set.tre –e 7006 
+
+# Here are seawater samples after 14-mer removal
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_Seawater.txt -o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Seawater.biom
+biom summarize-table –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Seawater.biom –o otu2016try14copied/ out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Seawater_summary.txt
+core_diversity_analyses.py –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Seawater.biom -o otu2016try14copied/core_output_ no_14_of_17bp_match_no_Chloroplast_no_Mitochondria_Seawater -m otu2016try14other/Pairwise_Mapping_File_Seawater.txt –t otu2016try14copied/rep_set.tre -e 6967
+
+#######################################################################################################################################################################
+# Here are the Procrustes Analyses that determine whether similar trends are evident with the EMP vs. EMP-PNA method. First I run the analysis on the entire dataset of soil, seawater, freshwater, terrestrial leaves, and aquatic leaves. This uses the dataset where mitochondria and chloroplast have already been filtered out. I then repeat this analysis afer filtering out the mitochondria, chloroplast, and OTUs in Table 1.
+# First I isolate just the samples generated with the EMP method
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_EMP.biom
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_EMP.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL_EMP_Samples –m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP.txt -t otu2016try14copied/rep_set.tre -e 6967
+
+# Then I isolate just the samples generated with the EMP + PNA method
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_PNA.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_PNA.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL__PNA_Samples -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA.txt –t otu2016try14copied/rep_set.tre -e 6967
+
+# You need to then open the weighted unifrac pc files and change the samples names to force QIIME into thinking they are the same samples, otherwise you get a no samples overlap error. Upload this new file and run the following script to generates Figure 3A:
+
+transform_coordinate_matrices.py -i otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL_EMP_Samples /bdiv_even6967/weighted_unifrac_pc_EMP.txt, otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL_PNA_Samples/bdiv_even6967/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results/
+make_emperor.py -c -i otu2016try14copied/procrustes_results/ -o otu2016try14copied/procrustes_results/plots/ -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+# Here I am repeating this analysis using the dataset that has removed chloroplast, mitochondria, and OTUs from Table 1
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP.txt -o otu2016try14copied/otu_table_2016_no_14_17match_no_Chloroplast_no_Mitochondria_EMP.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_14_17match_no_Chloroplast_no_Mitochondria_EMP.biom –o otu2016try14copied/otu_table_2016_no_14_17match_no_Chloroplast_no_Mitochondria_EMP_summary.txt
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_14_17match_no_Chloroplast_no_Mitochondria_EMP.biom -o otu2016try14copied/core_output_no_1417bpMatch_no_Chloroplast_no_Mito_ALL_EMP_Samples –m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP.txt -t otu2016try14copied/rep_set.tre -e 6967
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_14_of_17bp_match_no_Chloroplast_no_Mitochondria.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA.txt -o otu2016try14copied/otu_table_2016_no_1417bpMatch_no_Chloroplast_no_Mitochondria_PNA.biom
+biom summarize-table –i otu2016try14copied/otu_table_2016_no_1417bpMatch_no_Chloroplast_no_Mitochondria_PNA.biom –o otu2016try14copied/otu_table_2016_no_14_17match_no_Chloroplast_no_Mitochondria_PNA_summary.txt
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_1417bpMatch_no_Chloroplast_no_Mitochondria_PNA.biom –o otu2016try14copied/core_output_no_1417bpMatch_Chloroplast_no_Mito_ALL__PNA_Samples -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA.txt –t otu2016try14copied/rep_set.tre -e 6967
+
+# Again you must open the weighted unifrac pc files and change the samples names to force QIIME into thinking they are the same samples, otherwise you get a no samples overlap error. Upload the new file and run the following script to generate Figure 3B
+
+transform_coordinate_matrices.py -i otu2016try14copied/core_output_no_1417bpMatch_no_Chloroplast_no_Mito_ALL_EMP_Samples/bdiv_even6967/weighted_unifrac_pc_EMP.txt, otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL_PNA_Samples/bdiv_even6967/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_1417Match/
+make_emperor.py -c -i otu2016try14copied/procrustes_results_1417Match/ -o otu2016try14copied/procrustes_results_1417Match/plots/ -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+#######################################################################################################################################################################
+# Here I repeat the Procrustes analysis for each environment type separately
+
+# Here I am comparing EMP vs. EMP-PNA methods for all soil samples (Supplement B, Fig 1)
+
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Soil.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_soil.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Soil.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Soil.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Soil -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_soil.txt –t otu2016try14copied/rep_set.tre -e 195360
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Soil.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_soil.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Soil.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Soil.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Soil -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_soil.txt –t otu2016try14copied/rep_set.tre -e 195360
+transform_coordinate_matrices.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_ Soil/bdiv_even195360/weighted_unifrac_pc_EMP.txt, otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_ Soil/bdiv_even195360/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_Soil/ 
+make_emperor.py -c -i otu2016try14copied/procrustes_results_Soil/ -o otu2016try14copied/procrustes_results_Soil/plots/ -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+# Here I am comparing EMP vs. EMP-PNA methods for freshwater samples (Supplement B, Fig 2)
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Freshwater.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_freshwater.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Freshwater.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Freshwater.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Freshwater -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_freshwater.txt –t otu2016try14copied/rep_set.tre -e 17169
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast__.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_freshwater.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Freshwater.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Freshwater.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Freshwater -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_freshwater.txt –t otu2016try14copied/rep_set.tre -e 17169
+transform_coordinate_matrices.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_ Freshwater/bdiv_even17169/weighted_unifrac_pc_EMP.txt, otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_ Freshwater/bdiv_even17169/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_Freshwater/ 
+make_emperor.py -c -i otu2016try14copied/procrustes_results_Freshwater/ -o otu2016try14copied/procrustes_results_Freshwater/plots/ -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+# Here I am commparing EMP vs. EMP-PNA methods for seawater samples (Supplement B, Fig 3)
+
+core_diversity_analyses.py –i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mitochondria_Seawater -m otu2016try14other/Pairwise_Mapping_File_Seawater.txt –t 
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_seawater.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Seawater.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Seawater.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_Seawater -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_seawater.txt –t otu2016try14copied/rep_set.tre -e 7006
+filter_samples_from_otu_table.py -i otu2016try14copied/out_table_mc2_w_tax_no_pynast_failures_no_Chloroplast_no_Mitochondria_Seawater.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_seawater.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Seawater.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Seawater.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_Seawater -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_seawater.txt –t otu2016try14copied/rep_set.tre -e 7006
+transform_coordinate_matrices.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_ Seawater/bdiv_even7006/weighted_unifrac_pc_EMP.txt, otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_ Seawater/bdiv_even7006/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_Seawater/ 
+make_emperor.py -c -i otu2016try14copied/procrustes_results_Seawater/ -o otu2016try14copied/procrustes_results_Seawater/plots/ -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+# Here I am comparing EMP vs. EMP-PNA methods for aquatic leaves (Supplement B, Fig 4)
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_aquatic_leaves.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_AquaticLeaves.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_AquaticLeaves.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_AquaticLeaves -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_aquatic_leaves.txt –t otu2016try14copied/rep_set.tre -e 7907
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_Aquatic_Leaves.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_aquatic_leaves.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_AquaticLeaves.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_AquaticLeaves.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_AquaticLeaves -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_aquatic_leaves.txt –t otu2016try14copied/rep_set.tre -e 7907
+transform_coordinate_matrices.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_AquaticLeaves/bdiv_even7907/weighted_unifrac_pc_EMP.txt, otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_AquaticLeaves/bdiv_even7907/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_AquaticLeaves/ 
+make_emperor.py -c -i otu2016try14copied/procrustes_results_AquaticLeaves/ -o otu2016try14copied/procrustes_results_AquaticLeaves/plots/ -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+# Here I am comparing EMP vs. EMP-PNA methds for terrestrial leaves (Supplement B, Fig.5)
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_TerrestrialLeaves.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_terrestrial_leaves.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_TerrestrialLeaves.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_TerrestrialLeaves.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_TerrestrialLeaves -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA_terrestrial_leaves.txt –t otu2016try14copied/rep_set.tre -e 17454
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_TerrestrialLeaves.biom --sample_id_fp Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_terrestrial_leaves.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_TerrestrialLeaves.biom
+core_diversity_analyses.py –I otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_TerrestrialLeaves.biom –o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_TerrestrialLeaves -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP_terrestrial_leaves.txt –t otu2016try14copied/rep_set.tre -e 17454
+transform_coordinate_matrices.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_TerrestrialLeaves/bdiv_even17454/weighted_unifrac_pc_EMP.txt,otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_TerrestrialLeaves/bdiv_even17454/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_TerrestrialLeaves/ 
+ 
+transform_coordinate_matrices.py -i  otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_EMP_TerrestrialLeaves/bdiv_even17454/weighted_unifrac_pc_EMP.txt, otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mito_PNA_TerrestrialLeaves/bdiv_even17454/weighted_unifrac_pc_PNA.txt -r 999 -o otu2016try14copied/procrustes_results_TerrestrialLeaves/
+
+make_emperor.py -c -i otu2016try14copied/procrustes_results_TerrestrialLeaves/ -o otu2016try14copied/procrustes_results_TerrestrialLeaves/plots/new -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria.txt
+
+########################################################################################################################################################################
+# Metanalysis
+#Here I uploaded all BIOM tables from the EMP database, filtered out organelle reads, and rarefied each biom table down to 5k reads per sample (which eliminated some datasets entirely). Once rarefied, I filtered out only the OTUs in the pPNA14merD.fna file of Supplement A. Here is just the first dataset. I simply changed the sample numbers in QIIME to generate a tsv file for each dataset, and finally combined all text files into one large dataset. 
+
+filter_taxa_from_otu_table.py -i EMP_Database/1747_otu_table.biom -o EMP_Database/1747_otu_table_no_Chloroplast_3_24_2016.biom -n c__Chloroplast;
+filter_taxa_from_otu_table.py -i EMP_Database/1747_otu_table_no_Chloroplast_3_24_2016.biom -o EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_3_24_2016.biom -n f__mitochondria; 
+single_rarefaction.py -i EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_3_24_2016.biom -o EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_even5k_3_24_2016.biom -d 5000;
+filter_otus_from_otu_table.py -i EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_even5k_3_24_2016.biom -o EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_even5konly14of17bpmatch_3_24_2016.biom -e otu2016try14copied/14of17bpMatchOTUlist_3_24_2016.txt --negate_ids_to_exclude; 
+biom convert -i EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_even5konly14of17bpmatch_3_24_2016.biom -o EMP_Database/1747_otu_table_no_Chloroplast_no_Mito_even5konly14of17bpmatch_3_24_2016.txt --table-type="OTU table" --to-tsv
+
+#Above is just the first dataset, I repeated this script to generate a tsv for each dataset. Here I combined all text files into one large dataset. 
+
+merge_otu_tables.py -i EMP_Database/94_otu_table.biom,EMP_Database/103_otu_table.biom,EMP_Database/104_otu_table.biom,EMP_Database/213_otu_table.biom,EMP_Database/214_otu_table.biom,EMP_Database/231_otu_table.biom,EMP_Database/314_otu_table.biom,EMP_Database/316_otu_table.biom,EMP_Database/353_otu_table.biom,EMP_Database/391_otu_table.biom,EMP_Database/396_otu_table.biom,EMP_Database/619_otu_table.biom,EMP_Database/632_otu_table.biom,EMP_Database/638_otu_table.biom,EMP_Database/659_otu_table.biom,EMP_Database/662_otu_table.biom,EMP_Database/678_otu_table.biom,EMP_Database/713_otu_table.biom,EMP_Database/723_otu_table.biom,EMP_Database/776_otu_table.biom,EMP_Database/804_otu_table.biom,EMP_Database/805_otu_table.biom,EMP_Database/807_otu_table.biom,EMP_Database/808_otu_table.biom,EMP_Database/809_otu_table.biom,EMP_Database/810_otu_table.biom,EMP_Database/829_otu_table.biom,EMP_Database/846_otu_table.biom,EMP_Database/861_otu_table.biom,EMP_Database/864_otu_table.biom,EMP_Database/889_otu_table.biom,EMP_Database/894_otu_table.biom,EMP_Database/905_otu_table.biom,EMP_Database/910_otu_table.biom,EMP_Database/925_otu_table.biom,EMP_Database/926_otu_table.biom,EMP_Database/929_otu_table.biom,EMP_Database/933_otu_table.biom,EMP_Database/940_otu_table.biom,EMP_Database/945_otu_table.biom,EMP_Database/963_otu_table.biom,EMP_Database/990_otu_table.biom,EMP_Database/1001_otu_table.biom,EMP_Database/1024_otu_table.biom,EMP_Database/1030_otu_table.biom,EMP_Database/1031_otu_table.biom,EMP_Database/1033_otu_table.biom,EMP_Database/1034_otu_table.biom,EMP_Database/1035_otu_table.biom,EMP_Database/1036_otu_table.biom,EMP_Database/1037_otu_table.biom,EMP_Database/1038_otu_table.biom,EMP_Database/1039_otu_table.biom,EMP_Database/1041_otu_table.biom,EMP_Database/1043_otu_table.biom,EMP_Database/1056_otu_table.biom,EMP_Database/1064_otu_table.biom,EMP_Database/1197_otu_table.biom,EMP_Database/1198_otu_table.biom,EMP_Database/1222_otu_table.biom,EMP_Database/1235_otu_table.biom,EMP_Database/1240_otu_table.biom,EMP_Database/1242_otu_table.biom,EMP_Database/1288_otu_table.biom,EMP_Database/1289_otu_table.biom,EMP_Database/1364_otu_table.biom,EMP_Database/1453_otu_table.biom,EMP_Database/1485_otu_table.biom,EMP_Database/1526_otu_table.biom,EMP_Database/1530_otu_table.biom,EMP_Database/1552_otu_table.biom,EMP_Database/1578_otu_table.biom,EMP_Database/1579_otu_table.biom,EMP_Database/1580_otu_table.biom,EMP_Database/1621_otu_table.biom,EMP_Database/1622_otu_table.biom,EMP_Database/1627_otu_table.biom,EMP_Database/1632_otu_table.biom,EMP_Database/1642_otu_table.biom,EMP_Database/1665_otu_table.biom,EMP_Database/1671_otu_table.biom,EMP_Database/1673_otu_table.biom,EMP_Database/1674_otu_table.biom,EMP_Database/1692_otu_table.biom,EMP_Database/1694_otu_table.biom,EMP_Database/1696_otu_table.biom,EMP_Database/1702_otu_table.biom,EMP_Database/1711_otu_table.biom,EMP_Database/1713_otu_table.biom,EMP_Database/1714_otu_table.biom,EMP_Database/1715_otu_table.biom,EMP_Database/1716_otu_table.biom,EMP_Database/1717_otu_table.biom,EMP_Database/1721_otu_table.biom,EMP_Database/1734_otu_table.biom,EMP_Database/1736_otu_table.biom,EMP_Database/1740_otu_table.biom,EMP_Database/1747_otu_table.biom,EMP_Database/1773_otu_table.biom,EMP_Database/1792_otu_table.biom,EMP_Database/1818_otu_table.biom,EMP_Database/1845_otu_table.biom,EMP_Database/1883_otu_table.biom,EMP_Database/1885_otu_table.biom,EMP_Database/2019_otu_table.biom,EMP_Database/2020_otu_table.biom,EMP_Database/2080_otu_table.biom,EMP_Database/2104_otu_table.biom,EMP_Database/2182_otu_table.biom,EMP_Database/2229_otu_table.biom,EMP_Database/2259_otu_table.biom,EMP_Database/2300_otu_table.biom,EMP_Database/2338_otu_table.biom,EMP_Database/2382_otu_table.biom,EMP_Database/10119_otu_table.biom,EMP_Database/10141_otu_table.biom,EMP_Database/10142_otu_table.biom,EMP_Database/10143_otu_table.biom,EMP_Database/10246_otu_table.biom,EMP_Database/10156_otu_table.biom,EMP_Database/10180_otu_table.biom,EMP_Database/10196_otu_table.biom,EMP_Database/10245_otu_table.biom,EMP_Database/10246_otu_table.biom,EMP_Database/10272_otu_table.biom,EMP_Database/10273_otu_table.biom,EMP_Database/10278_otu_table.biom,EMP_Database/10308_otu_table.biom,EMP_Database/10311_otu_table.biom,EMP_Database/10324_otu_table.biom,EMP_Database/10346_otu_table.biom,EMP_Database/10363_otu_table.biom,EMP_Database/10369_otu_table.biom,EMP_Database/10376_otu_table.biom -o EMP_Database/135study_merged_otu_table.biom
+
+########################################################################################################################################################################
+#Here I create some alpha diversity graphs
+
+# Here I generate the data that goes into Figure 2A
+
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_EMP.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL_EMP_Samples –m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP.txt -t otu2016try14copied/rep_set.tre -e 6967
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_PNA.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_ALL__PNA_Samples -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA.txt –t otu2016try14copied/rep_set.tre -e 6967
+
+# Here I generate the data that goes into Figure 2B
+
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_14_17match_no_Chloroplast_no_Mitochondria_EMP.biom -o otu2016try14copied/core_output_no_1417bpMatch_no_Chloroplast_no_Mito_ALL_EMP_Samples –m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_EMP.txt -t otu2016try14copied/rep_set.tre -e 6967
+core_diversity_analyses.py –i otu2016try14copied/otu_table_2016_no_1417bpMatch_no_Chloroplast_no_Mitochondria_PNA.biom –o otu2016try14copied/core_output_no_1417bpMatch_Chloroplast_no_Mito_ALL__PNA_Samples -m Pairwise_Mapping_File_no_Chloroplast_no_Mitochondria_PNA.txt –t otu2016try14copied/rep_set.tre -e 6967
+
+###############################################################################################################################################
+#Here I redo the beta-diversity analyses with the original dataset, after 14mers removed, and 12mers removed, all rarefied to the smallest dataset in the 12mer. This is just the first pairwise comparison, I repeated this for each pairwise comparison, just changing the rarefaction depth. These data are reported in Supplement D, Table 5.
+
+filter_samples_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria.biom --sample_id_fp otu2016try14other/Pairwise_Mapping_File_15.109.txt -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109new.biom; core_diversity_analyses.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109new.biom -o otu2016try14copied/core_output_no_Chloro_no_Mito_15.109new -m otu2016try14other/Pairwise_Mapping_File_15.109.txt -t otu2016try14copied/rep_set.tre -e 21500 --suppress_alpha_diversity; filter_otus_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109new.biom -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109_no_14mersnew.biom -e otu2016try14copied/14of17bpMatchOTUlist.txt; core_diversity_analyses.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109_no_14mersnew.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_15.109_no_14mersnew.biom -m otu2016try14other/Pairwise_Mapping_File_15.109.txt -t otu2016try14copied/rep_set.tre -e 21500 --suppress_alpha_diversity; filter_otus_from_otu_table.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109new.biom -o otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109_no_12mersnew.biom -e otu2016try14copied/12of17bpMatchOTUlist_10_29_2016.txt; core_diversity_analyses.py -i otu2016try14copied/otu_table_2016_no_Chloroplast_no_Mitochondria_15.109_no_12mersnew.biom -o otu2016try14copied/core_output_no_Chloroplast_no_Mito_15.109_no_12mersnew.biom -m otu2016try14other/Pairwise_Mapping_File_15.109.txt -t otu2016try14copied/rep_set.tre -e 21500 --suppress_alpha_diversity
+
+
+
+
