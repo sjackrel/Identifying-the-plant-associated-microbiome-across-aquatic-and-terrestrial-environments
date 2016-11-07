@@ -33,6 +33,12 @@ align_seqs:min_length 75
 
 split_libraries_fastq.py –i out.join.fastq,out.prelim.join.fastq,out.Cathy.EMPjoin.fastq,December_2015/out.join.fastq -m Jackrel_2016_Mapping_merged.txt –o split_libraries_2016_all_jan_18_2016 –b out.barcodes.fastq,out.prelim.barcodes.fastq,out.Cathy.EMP.barcodes.fastq,December_2015/out.barcodes.fastq --rev_comp_mapping_barcodes
 
+# Chimera checking step in mothur
+summary.seqs(fasta=seqs.fna) #seqs.fna file from the split_libraries_fastq.py script output
+chimera.uchime(fasta= seqs.fna, dereplicate=t,processors=10)
+remove.seqs(fasta=seqs.fna, accnos= seqs.denovo.uchime.accnos)
+summary.seqs(fasta=current)
+
 # OTU clustering
 pick_open_reference_otus.py -i split_libraries_2016_all_jan_18_2016/seqs.fna -o otu2016try14copied -p param4.txt
 
